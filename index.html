@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ZChat Master Edition</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <style>
+        :root {
+            --bg: #000;
+            --surf: #0a0a0a;
+            --card: #121212;
+            --blue: #007bff;
+            --border: #222;
+            --text: #fff;
+            --red: #ff3b30;
+            --green: #4cd964;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .hidden { display: none !important; }
+
+        /* UI Elements */
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            background: var(--surf);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: #fff;
+            outline: none;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-p { background: var(--blue); color: #fff; }
+        .btn-p:active { opacity: 0.8; }
+
+        /* Header */
+        header {
+            background: var(--card);
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--blue);
+            z-index: 10;
+        }
+
+        /* Sidebar */
+        #sidebar {
+            position: fixed;
+            top: 0;
+            right: -280px;
+            width: 260px;
+            height: 100%;
+            background: var(--card);
+            z-index: 1000;
+            transition: 0.3s ease-in-out;
+            padding: 20px;
+            border-left: 1px solid var(--blue);
+        }
+
+        #sidebar.active { right: 0; }
+
+        /* Chat Bubbles */
+        #msgs {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .bubble {
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 15px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .msg-me {
+            align-self: flex-end;
+            background: var(--blue);
+            border-bottom-right-radius: 2px;
+        }
+
+        .msg-them {
+            align-self: flex-start;
+            background: var(--surf);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 2px;
+        }
+
+        /* Modals */
+        #adm-modal {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 2000;
+            padding: 20px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .adm-user-row {
+            background: var(--surf);
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--blue);
+            padding: 10px 20px;
+            border-radius: 20px;
+            z-index: 5000;
+            display: none;
+            font-size: 13px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toast"></div>
+
+    <div id="scr-auth" style="flex:1; display:flex; align-items:center; justify-content:center; padding:20px;">
+        <div style="width:100%; max-width:300px; text-align:center;">
+            <h1 style="color:var(--blue); font-size:60px; font-weight:900;">Z</h1>
+            <p id="auth-label" style="margin-bottom:20px; color:gray;">Login ke ZChat</p>
+            <input id="u-in" placeholder="Username" autocomplete="off">
+            <input id="p-in" type="password" placeholder="Password">
+            <button class="btn btn-p" onclick="doAuth()">MASUK</button>
+            <p onclick="toggleM()" style="margin-top:15px; font-size:12px; color:var(--blue); cursor:pointer;">Belum punya akun? Daftar</p>
+        </div>
+    </div>
+
+    <div id="scr-app" class="hidden" style="flex:1; display:flex; flex-direction:column;">
+        <header>
+            <div id="my-n" style="font-size:12px; font-weight:bold; color:var(--blue)"></div>
+            <b style="letter-spacing:3px;">ZCHAT</b>
+            <div onclick="toggleS(true)" style="cursor:pointer; font-size:24px;">☰</div>
+        </header>
+
+        <div id="sidebar">
+            <h3 style="color:var(--blue); margin-bottom:15px;">MENU</h3>
+            <p style="font-size:10px; color:gray;">PERMINTAAN PERTEMANAN</p>
+            <div id="req-list" style="margin:10px 0;"></div>
+            
+            <hr style="border:0; border-top:1px solid #222; margin:15px 0;">
+            
+            <div class="btn" onclick="changeP()" style="font-size:13px; text-align:left; padding:0; margin-bottom:15px;">🔒 Ganti Password</div>
+            
+            <div id="adm-btn" class="hidden" onclick="openAdm()" style="padding:12px; border:1px solid var(--blue); color:var(--blue); border-radius:10px; text-align:center; font-weight:bold; cursor:pointer; margin-bottom:15px;">
+                ⚙️ ADMIN PANEL
+            </div>
+            
+            <button class="btn" style="background:var(--red); color:#fff; margin-top:10px;" onclick="logout()">KELUAR</button>
+            <button class="btn" style="margin-top:10px; background:#333; color:#fff;" onclick="toggleS(false)">TUTUP</button>
+        </div>
+
+        <main style="padding:15px; flex:1; overflow-y:auto;">
+            <button class="btn btn-p" onclick="addF()">+ TAMBAH TEMAN</button>
+            <div id="flist" style="margin-top:20px;"></div>
+        </main>
+    </div>
+
+    <div id="chat-v" class="hidden" style="position:fixed; inset:0; background:#000; z-index:1500; display:flex; flex-direction:column;">
+        <header>
+            <div onclick="closeC()" style="cursor:pointer; font-weight:bold; color:var(--blue)">← KEMBALI</div>
+            <b id="p-n">USERNAME</b>
+            <div style="width:50px;"></div>
+        </header>
+        <div id="msgs"></div>
+        <div style="padding:15px; background:var(--card); display:flex; gap:10px;">
+            <input id="m-in" placeholder="Ketik pesan..." style="margin:0; flex:1;">
+            <button class="btn btn-p" style="width:70px; margin:0;" onclick="sendM()">KIRIM</button>
+        </div>
+    </div>
+
+    <div id="adm-modal">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h2 style="color:var(--blue)">PANEL OWNER</h2>
+            <b onclick="document.getElementById('adm-modal').style.display='none'" style="color:var(--red); cursor:pointer;">X</b>
+        </div>
+        <div id="adm-u"></div>
+        <button class="btn" onclick="clearDB()" style="background:var(--red); color:#fff; margin-top:20px;">RESET SEMUA CHAT</button>
+    </div>
+
+    <script>
+        // Konfigurasi Firebase
+        const fbConfig = {
+            databaseURL: "https://zchat-56639-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+        firebase.initializeApp(fbConfig);
+        const db = firebase.database();
+        const OWNER = "zZerr44";
+
+        let me = null, peer = null, isReg = false;
+
+        // Utility: Toast
+        function tst(msg) {
+            const e = document.getElementById('toast');
+            e.innerText = msg;
+            e.style.display = 'block';
+            setTimeout(() => e.style.display = 'none', 2500);
+        }
+
+        // Auth Logic
+        function toggleM() {
+            isReg = !isReg;
+            document.getElementById('auth-label').innerText = isReg ? "Daftar Akun Baru" : "Login ke ZChat";
+            document.querySelector('#scr-auth .btn-p').innerText = isReg ? "DAFTAR" : "MASUK";
+        }
+
+        function toggleS(show) {
+            document.getElementById('sidebar').classList.toggle('active', show);
+        }
+
+        async function doAuth() {
+            const u = document.getElementById('u-in').value.trim().toLowerCase();
+            const p = document.getElementById('p-in').value;
+            
+            if(!u || !p) return tst("Isi semua field!");
+
+            if (isReg) {
+                const s = await db.ref('u/' + u).once('value');
+                if(s.exists()) return tst("Username sudah dipakai!");
+                await db.ref('u/' + u).set({ u, p });
+                tst("Berhasil daftar! Silakan login.");
+                toggleM();
+            } else {
+                const s = await db.ref('u/' + u).once('value');
+                if (s.exists() && s.val().p === p) {
+                    me = s.val();
+                    startApp();
+                } else {
+                    tst("Username atau Password salah!");
+                }
+            }
+        }
+
+        // App Logic
+        function startApp() {
+            document.getElementById('scr-auth').classList.add('hidden');
+            document.getElementById('scr-app').classList.remove('hidden');
+            document.getElementById('my-n').innerText = "@" + me.u;
+
+            if (me.u === OWNER.toLowerCase()) {
+                document.getElementById('adm-btn').classList.remove('hidden');
+            }
+
+            // Listen Friend Requests
+            db.ref('req/' + me.u).on('value', s => {
+                const l = document.getElementById('req-list');
+                l.innerHTML = "";
+                if(!s.exists()) l.innerHTML = "<small style='color:gray'>Tidak ada permintaan</small>";
+                s.forEach(i => {
+                    l.innerHTML += `
+                        <div class="adm-user-row">
+                            <span>${i.key}</span>
+                            <button onclick="acc('${i.key}')" style="background:var(--green); border:none; padding:4px 8px; border-radius:5px; color:#000; font-weight:bold;">TERIMA</button>
+                        </div>`;
+                });
+            });
+
+            // Listen Friend List
+            db.ref('f/' + me.u).on('value', s => {
+                const l = document.getElementById('flist');
+                l.innerHTML = "";
+                if(!s.exists()) l.innerHTML = "<p style='text-align:center; color:gray; margin-top:20px;'>Belum ada teman. Tambahkan teman dulu!</p>";
+                s.forEach(i => {
+                    l.innerHTML += `
+                        <div onclick="openC('${i.key}')" style="background:var(--card); padding:15px; margin-bottom:10px; border-radius:12px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                            <b>${i.key.toUpperCase()}</b>
+                            <span style="color:var(--blue)">Chat →</span>
+                        </div>`;
+                });
+            });
+        }
+
+        function addF() {
+            const t = prompt("Masukkan Username Teman:");
+            if (t && t.toLowerCase() !== me.u) {
+                db.ref('req/' + t.toLowerCase() + '/' + me.u).set(true);
+                tst("Permintaan terkirim ke " + t);
+            }
+        }
+
+        async function acc(f) {
+            await db.ref('f/' + me.u + '/' + f).set(true);
+            await db.ref('f/' + f + '/' + me.u).set(true);
+            await db.ref('req/' + me.u + '/' + f).remove();
+            tst("Sekarang berteman dengan " + f);
+        }
+
+        // Chat Logic
+        function openC(n) {
+            peer = n;
+            document.getElementById('p-n').innerText = n.toUpperCase();
+            document.getElementById('chat-v').classList.remove('hidden');
+            const room = [me.u, n].sort().join('_');
+            
+            db.ref('m/' + room).on('value', s => {
+                const l = document.getElementById('msgs');
+                l.innerHTML = "";
+                s.forEach(m => {
+                    const v = m.val();
+                    l.innerHTML += `<div class="bubble ${v.s === me.u ? 'msg-me' : 'msg-them'}">${v.t}</div>`;
+                });
+                l.scrollTop = l.scrollHeight;
+            });
+        }
+
+        function sendM() {
+            const i = document.getElementById('m-in');
+            if (!i.value.trim()) return;
+            const room = [me.u, peer].sort().join('_');
+            db.ref('m/' + room).push({ s: me.u, t: i.value });
+            i.value = "";
+        }
+
+        function closeC() {
+            document.getElementById('chat-v').classList.add('hidden');
+            db.ref('m').off();
+        }
+
+        // Admin Logic
+        async function openAdm() {
+            document.getElementById('adm-modal').style.display = 'block';
+            const l = document.getElementById('adm-u');
+            const s = await db.ref('u').once('value');
+            l.innerHTML = "";
+            s.forEach(u => {
+                const d = u.val();
+                l.innerHTML += `
+                    <div class="adm-user-row">
+                        <span><b>${d.u}</b> (${d.p})</span>
+                        <button onclick="kick('${d.u}')" style="color:var(--red); background:none; border:none; font-weight:bold;">HAPUS</button>
+                    </div>`;
+            });
+        }
+
+        async function kick(n) {
+            if(confirm("Hapus user " + n + "?")) {
+                await db.ref('u/' + n).remove();
+                openAdm();
+            }
+        }
+
+        function clearDB() {
+            if(confirm("Hapus SEMUA sejarah chat?")) {
+                db.ref('m').remove();
+                tst("Database chat dibersihkan!");
+            }
+        }
+
+        function logout() { location.reload(); }
+
+        function changeP() {
+            const p = prompt("Masukkan Password Baru:");
+            if (p) {
+                db.ref('u/' + me.u + '/p').set(p);
+                tst("Password berhasil diubah!");
+            }
+        }
+    </script>
+</body>
+</html>
